@@ -63,15 +63,18 @@ class ImportController extends Controller
     {
         $extension = $file->getClientOriginalExtension();
         $filePath = $file->store('imports');
+        $fullPath = storage_path('app' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $filePath));
 
         try {
             if (in_array(strtolower($extension), ['xlsx', 'xls'])) {
-                return $this->parseExcel(storage_path('app/' . $filePath));
+                return $this->parseExcel($fullPath);
             } else {
-                return $this->parseCSV(storage_path('app/' . $filePath));
+                return $this->parseCSV($fullPath);
             }
         } finally {
-            @unlink(storage_path('app/' . $filePath));
+            if (file_exists($fullPath)) {
+                @unlink($fullPath);
+            }
         }
     }
 
