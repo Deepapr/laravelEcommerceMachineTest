@@ -285,7 +285,7 @@
 <body>
     <nav class="navbar">
         <div class="nav-left">
-            <a href="{{ route('home') }}" style="font-size: 1.5rem; font-weight: bold;">🛍️ EComm Store</a>
+            <a href="{{ route('home') }}" style="font-size: 1.5rem; font-weight: bold;">eCom</a>
             <a href="{{ route('products.index') }}">Products</a>
         </div>
         <div class="nav-right">
@@ -338,7 +338,7 @@
     </div>
 
     <footer>
-        <p>&copy; 2026 E-Commerce Store. All rights reserved.</p>
+        <p>&copy; E-Commerce. All rights reserved.</p>
     </footer>
 </body>
 </html>
