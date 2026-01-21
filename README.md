@@ -26,3 +26,12 @@
 
 ## Excel Import Format
 product_name,category,color,size,price,quantity,description,sku,image_url
+Make an existing user an admin:
+```bash
+php artisan user:make-admin your-email@example.com
+```
+
+Create a new admin user:
+```bash
+php artisan user:make-admin newemail@example.com --password="YourPassword123"
+```
