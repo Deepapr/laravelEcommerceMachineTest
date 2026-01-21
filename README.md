@@ -11,9 +11,8 @@
 ## Tech Stack
 - Laravel
 - MySQL
-- Laravel Breeze
 - Laravel Excel
-- PHP GD (for image conversion)
+- image conversion
 
 ## Setup Instructions
 1. Clone the repository
