@@ -10,30 +10,22 @@ class ImageService
     protected string $disk = 'public';
     protected string $path = 'products';
 
-    /**
-     * Upload and convert image to WEBP format
-     */
     public function uploadAndConvert(UploadedFile $file, ?string $oldPath = null): string
     {
         try {
-            // Delete old image if exists
             if ($oldPath) {
                 $this->deleteImage($oldPath);
             }
 
-            // Validate file is an image
             if (!in_array($file->extension(), ['jpg', 'jpeg', 'png', 'JPG', 'JPEG', 'PNG'])) {
                 throw new \Exception('Only JPG and PNG images are allowed');
             }
 
-            // Generate unique filename
             $filename = Str::random(32) . '.webp';
             $fullPath = $this->path . '/' . $filename;
 
-            // Save as WEBP using exec (requires ImageMagick or ffmpeg)
             $storagePath = storage_path('app/public/' . $fullPath);
             
-            // Ensure directory exists
             if (!file_exists(dirname($storagePath))) {
                 mkdir(dirname($storagePath), 0755, true);
             }
@@ -48,15 +40,11 @@ class ImageService
         }
     }
 
-    /**
-     * Convert image to WEBP using available tools or fallback
-     */
+  
     protected function convertToWebp(string $sourcePath, string $destinationPath): void
     {
-        // Try using cwebp if available
         $cwebpPath = $this->findExecutable('cwebp');
         if ($cwebpPath) {
-            // Windows or Unix/Linux
             $command = escapeshellcmd($cwebpPath) . ' ' . escapeshellarg($sourcePath) . ' -o ' . escapeshellarg($destinationPath) . ' -q 80';
             @shell_exec($command);
             
@@ -65,19 +53,15 @@ class ImageService
             }
         }
 
-        // Fallback: Copy original file with webp extension (browser will handle)
         copy($sourcePath, $destinationPath);
     }
 
-    /**
-     * Find executable in system PATH
-     */
+
     protected function findExecutable(string $name): ?string
     {
         $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
         $executable = $isWindows ? $name . '.exe' : $name;
 
-        // Check common paths
         $paths = [
             'C:\\Program Files\\ImageMagick\\' . $executable,
             'C:\\Program Files (x86)\\ImageMagick\\' . $executable,
@@ -98,9 +82,6 @@ class ImageService
         return !empty($output) ? $output : null;
     }
 
-    /**
-     * Delete image from storage
-     */
     public function deleteImage(string $path): bool
     {
         try {
@@ -115,17 +96,13 @@ class ImageService
         }
     }
 
-    /**
-     * Get image URL
-     */
+  
     public function getUrl(string $path): string
     {
         return asset('storage/' . $path);
     }
 
-    /**
-     * Download and convert image from URL
-     */
+
     public function downloadAndConvert(string $imageUrl): ?string
     {
         try {

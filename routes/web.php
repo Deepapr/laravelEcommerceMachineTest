@@ -16,7 +16,6 @@ Route::get('/', function () {
 Route::get('/products', [ProductController::class, 'index'])->name('products.index');
 Route::get('/products/{product}', [ProductController::class, 'show'])->name('products.show');
 
-// Cart routes (require authentication)
 Route::middleware('auth')->group(function () {
     Route::post('/cart/add', [CartController::class, 'add'])->name('cart.add');
     Route::get('/cart', [CartController::class, 'view'])->name('cart.view');
@@ -24,14 +23,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/cart/remove', [CartController::class, 'remove'])->name('cart.remove');
 });
 
-// Checkout routes (require authentication)
 Route::middleware('auth')->group(function () {
     Route::post('/checkout/validate-coupon', [CheckoutController::class, 'validateCoupon'])->name('checkout.validate-coupon');
     Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout.show');
     Route::post('/checkout', [CheckoutController::class, 'process'])->name('checkout.process');
 });
 
-// Authentication routes
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AuthController::class, 'login'])->name('auth.login');
@@ -69,8 +66,7 @@ Route::middleware('admin')->prefix('admin')->group(function () {
     Route::post('/coupons', [\App\Http\Controllers\CouponController::class, 'store'])->name('coupons.store');
     Route::delete('/coupons/{coupon}', [\App\Http\Controllers\CouponController::class, 'destroy'])->name('coupons.destroy');
     
-    // Import routes
-    Route::get('/import', [ImportController::class, 'show'])->name('import.show');
-    Route::post('/import', [ImportController::class, 'process'])->name('import.process');
+  Route::get('/import', [ImportController::class, 'show'])->name('import.show');
+    Route::post('/import', [ImportController::class, 'import'])->name('import.process');
 });
 

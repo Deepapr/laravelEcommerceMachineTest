@@ -29,7 +29,6 @@ class CouponController extends Controller
             'usage_limit' => 'nullable|integer|min:1',
             'valid_from' => 'nullable|date',
             'valid_until' => 'nullable|date|after:valid_from',
-            'active' => 'boolean'
         ]);
 
         $validated['active'] = $request->has('active');

@@ -60,16 +60,4 @@ After running the seeder, you have:
   - Password: `password`
   - Permissions: Can browse products and checkout
 
-## User Roles
 
-| Role | Can Register | Can Shop | Can Manage Products |
-|------|-------------|----------|-------------------|
-| Customer | ✓ Yes (via form) | ✓ Yes | ✗ No |
-| Admin | ✗ No (via command only) | ✗ No | ✓ Yes |
-
-## Important Notes
-
-- Only use artisan commands to create admin accounts
-- Never allow users to choose their own role during registration
-- Always protect admin routes with proper authentication
-- Admins cannot add products to cart or checkout

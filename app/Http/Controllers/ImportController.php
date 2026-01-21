@@ -2,151 +2,210 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\ProductImportService;
 use Illuminate\Http\Request;
+use App\Models\Product;
+use App\Models\Category;
+use App\Models\Color;
+use App\Models\Size;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use App\Imports\ProductImport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ImportController extends Controller
 {
-    protected ProductImportService $importService;
-
-    public function __construct(ProductImportService $importService)
+    public function __construct()
     {
-        $this->importService = $importService;
         $this->middleware('auth');
     }
 
     /**
-     * Show import form
+     * Show import page
      */
     public function show()
     {
         return view('admin.import.show');
     }
 
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls'
+        ]);
+
+        Excel::import(new ProductImport, $request->file('file'));
+
+        return back()->with('success', 'Products imported successfully');
+    }
     /**
-     * Process import
+     * Handle import
      */
     public function process(Request $request)
     {
-        $validated = $request->validate([
-            'file' => 'required|file|mimes:csv,xlsx,xls|max:5120'
+        $request->validate([
+            'file' => 'required|mimes:csv,xlsx,xls|max:5120'
         ]);
 
+        $file = $request->file('file');
+        $rows = $this->parseFile($file);
+
+        if (empty($rows)) {
+            return back()->with('error', 'No data found in file');
+        }
+
+        $success = 0;
+        $failed = 0;
+        $errors = [];
+
+        foreach ($rows as $index => $row) {
+            try {
+                $this->importRow($row);
+                $success++;
+            } catch (\Exception $e) {
+                $failed++;
+                $errors[] = 'Row ' . ($index + 2) . ': ' . $e->getMessage();
+            }
+        }
+
+        return back()->with([
+            'success' => "Import completed. {$success} success, {$failed} failed.",
+            'import_errors' => $errors
+        ]);
+    }
+
+    /**
+     * Import one row
+     */
+    private function importRow(array $row): void
+    {
+        if (
+            empty($row['product_name']) ||
+            empty($row['quantity']) ||
+            empty($row['price'])
+        ) {
+            throw new \Exception('Missing required fields');
+        }
+
+        $category = !empty($row['category'])
+            ? Category::firstOrCreate(['name' => trim($row['category'])])
+            : null;
+
+        $color = !empty($row['color'])
+            ? Color::where('name', trim($row['color']))->first()
+            : null;
+
+        $size = !empty($row['size'])
+            ? Size::where('name', trim($row['size']))->first()
+            : null;
+
+        $imagePath = null;
+        if (!empty($row['image_url'])) {
+            $imagePath = $this->downloadAndConvertImage($row['image_url']);
+        }
+
+        Product::create([
+            'name' => trim($row['product_name']),
+            'category_id' => $category?->id,
+            'color_id' => $color?->id,
+            'size_id' => $size?->id,
+            'qty' => (int)$row['quantity'],
+            'price' => (float)$row['price'],
+            'image' => $imagePath,
+        ]);
+    }
+
+    /**
+     * Download image and convert to WEBP
+     */
+    private function downloadAndConvertImage(string $url): ?string
+    {
         try {
-            $file = $validated['file'];
-            $rows = $this->parseFile($file);
+            $response = Http::timeout(20)->get($url);
 
-            if (empty($rows)) {
-                return back()->with('error', 'No data found in the file');
+            if (!$response->successful()) {
+                return null;
             }
 
-            $results = $this->importService->import($rows);
-
-            $successMessage = "Import completed! {$results['success']} products imported successfully.";
-            if ($results['failed'] > 0) {
-                $successMessage .= " {$results['failed']} rows failed.";
+            $image = imagecreatefromstring($response->body());
+            if (!$image) {
+                return null;
             }
 
-            return back()
-                ->with('success', $successMessage)
-                ->with('import_errors', $results['errors']);
+            $fileName = Str::uuid() . '.webp';
+            $path = storage_path('app/public/products');
+
+            if (!is_dir($path)) {
+                mkdir($path, 0777, true);
+            }
+
+            imagewebp($image, $path . '/' . $fileName, 80);
+            imagedestroy($image);
+
+            return 'products/' . $fileName;
 
         } catch (\Exception $e) {
-            return back()->with('error', 'Import failed: ' . $e->getMessage());
+            Log::warning('Image import failed: ' . $e->getMessage());
+            return null;
         }
     }
 
     /**
-     * Parse CSV or Excel file
+     * Parse CSV or Excel
      */
-    protected function parseFile($file): array
+    private function parseFile($file): array
     {
-        $extension = $file->getClientOriginalExtension();
-        $filePath = $file->store('imports');
-        $fullPath = storage_path('app' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $filePath));
+        $extension = strtolower($file->getClientOriginalExtension());
+        $path = $file->store('imports');
+        $fullPath = storage_path('app/' . $path);
 
-        try {
-            if (in_array(strtolower($extension), ['xlsx', 'xls'])) {
-                return $this->parseExcel($fullPath);
-            } else {
-                return $this->parseCSV($fullPath);
-            }
-        } finally {
-            if (file_exists($fullPath)) {
-                @unlink($fullPath);
-            }
+        if (in_array($extension, ['xlsx', 'xls'])) {
+            return $this->parseExcel($fullPath);
         }
+
+        return $this->parseCSV($fullPath);
     }
 
     /**
-     * Parse Excel file using PHP Spreadsheet
+     * Parse Excel
      */
-    protected function parseExcel(string $filePath): array
+    private function parseExcel(string $filePath): array
     {
         $rows = [];
+        $sheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($filePath)->getActiveSheet();
 
-        try {
-            // Check if PhpSpreadsheet is available
-            if (!class_exists('\PhpOffice\PhpSpreadsheet\IOFactory')) {
-                // Fallback to simple CSV conversion
-                return $this->parseCSV($filePath);
+        $header = [];
+        foreach ($sheet->toArray() as $index => $row) {
+            if ($index === 0) {
+                $header = array_map('strtolower', $row);
+                continue;
             }
-            
-            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($filePath);
-            $worksheet = $spreadsheet->getActiveSheet();
 
-            $headerRow = null;
-            foreach ($worksheet->getRowIterator() as $row) {
-                $cellIterator = $row->getCellIterator();
-                $cellIterator->setIterateOnlyExistingCells(false);
-
-                $rowData = [];
-                foreach ($cellIterator as $cell) {
-                    $rowData[] = $cell->getValue();
-                }
-
-                // Skip empty rows
-                if (array_filter($rowData)) {
-                    if (!$headerRow) {
-                        $headerRow = $rowData;
-                    } else {
-                        $rows[] = array_combine($headerRow, $rowData);
-                    }
-                }
-            }
-        } catch (\Exception $e) {
-            // Fallback to CSV parsing
-            return $this->parseCSV($filePath);
+            $rows[] = array_combine($header, $row);
         }
 
         return $rows;
     }
 
     /**
-     * Parse CSV file
+     * Parse CSV
      */
-    protected function parseCSV(string $filePath): array
+    private function parseCSV(string $filePath): array
     {
         $rows = [];
-        $headerRow = null;
+        $header = [];
 
-        if (($handle = fopen($filePath, 'r')) !== false) {
-            while (($data = fgetcsv($handle, 1000, ',')) !== false) {
-                // Skip empty rows
-                if (!array_filter($data)) {
-                    continue;
-                }
-
-                if (!$headerRow) {
-                    $headerRow = array_map('trim', $data);
-                } else {
-                    $rowData = array_map('trim', $data);
-                    $rows[] = array_combine($headerRow, $rowData);
-                }
+        $handle = fopen($filePath, 'r');
+        while (($data = fgetcsv($handle)) !== false) {
+            if (!$header) {
+                $header = array_map('strtolower', $data);
+                continue;
             }
-            fclose($handle);
+
+            $rows[] = array_combine($header, $data);
         }
 
+        fclose($handle);
         return $rows;
     }
 }
